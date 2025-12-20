@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Vertabular",
+  "version": "1.0",
+  "description": "Minimal open-source vertical tabs.",
+  "permissions": ["tabs", "sidePanel", "activeTab", "tabGroups", "favicon", "storage", "bookmarks"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Click to open Vertical Tabs"
+  },
+  "icons": {
+    "16": "icon.png", 
+    "48": "icon.png",
+    "128": "icon.png"
+  } 
+}
