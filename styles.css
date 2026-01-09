@@ -628,6 +628,11 @@ body {
   letter-spacing: 0.8px;
 }
 
+.workspace-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
 .workspace-item {
   display: flex;
   align-items: center;

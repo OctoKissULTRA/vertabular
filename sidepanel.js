@@ -20,6 +20,8 @@ const saveWorkspaceBtn = document.getElementById('save-workspace-btn');
 const workspaceNameInput = document.getElementById('workspace-name-input');
 const workspacesList = document.getElementById('workspaces-list');
 const exportWorkspacesBtn = document.getElementById('export-workspaces-btn');
+const importWorkspacesBtn = document.getElementById('import-workspaces-btn');
+const importFileInput = document.getElementById('import-file-input');
 
 // Settings Elements
 const settingsBtn = document.getElementById('settings-btn');
@@ -73,16 +75,22 @@ function showToast(message, options = {}) {
 
   const toast = document.createElement('div');
   toast.className = 'toast';
-  toast.innerHTML = `
-    <span class="toast-message">${message}</span>
-    ${action ? `<button class="toast-action">${actionLabel || 'Undo'}</button>` : ''}
-  `;
+
+  // Create message span safely (XSS prevention)
+  const messageSpan = document.createElement('span');
+  messageSpan.className = 'toast-message';
+  messageSpan.textContent = message;
+  toast.appendChild(messageSpan);
 
   if (action) {
-    toast.querySelector('.toast-action').onclick = () => {
+    const actionBtn = document.createElement('button');
+    actionBtn.className = 'toast-action';
+    actionBtn.textContent = actionLabel || 'Undo';
+    actionBtn.onclick = () => {
       action();
       toast.remove();
     };
+    toast.appendChild(actionBtn);
   }
 
   toastContainer.appendChild(toast);
@@ -222,7 +230,7 @@ function createTabElement(tab, inGroup = false) {
   const div = document.createElement('div');
   div.className = `tab-item${tab.active ? ' active' : ''}${inGroup ? ' in-group' : ''}${tab.audible ? ' playing' : ''}${tab.discarded ? ' discarded' : ''}`;
   div.id = `tab-${tab.id}`;
-  div.setAttribute('role', 'tab');
+  div.setAttribute('role', 'option');
   div.setAttribute('aria-selected', tab.active ? 'true' : 'false');
   div.setAttribute('aria-label', tab.title);
   div.tabIndex = 0;
@@ -233,12 +241,15 @@ function createTabElement(tab, inGroup = false) {
   const urlForFavicon = tab.url || 'chrome://newtab';
   const faviconUrl = chrome.runtime.getURL(`_favicon/?pageUrl=${encodeURIComponent(urlForFavicon)}&size=32`);
 
+  // Default favicon SVG as data URI for fallback
+  const defaultFavicon = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%235f6368"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>');
+
   const audioIcon = `<svg class="secondary-icon audio-icon" viewBox="0 0 24 24" aria-label="Playing audio"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>`;
   const closeIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   const hibernateIndicator = tab.discarded ? `<span class="memory-saver-indicator" title="Hibernated">zzz</span>` : '';
 
   div.innerHTML = `
-    <img src="${faviconUrl}" class="favicon" alt="" loading="lazy">
+    <img src="${faviconUrl}" class="favicon" alt="" loading="lazy" onerror="this.src='${defaultFavicon}'">
     <span class="title">${escapeHtml(tab.title)}</span>
     ${hibernateIndicator}
     ${tab.audible ? audioIcon : ''}
@@ -346,6 +357,21 @@ function closeTabWithUndo(tab) {
     closedTabsHistory.pop();
   }
 
+  // Move focus to adjacent tab before closing
+  const visibleTabs = [];
+  document.querySelectorAll('.tab-item').forEach(el => {
+    const id = parseInt(el.id.replace('tab-', ''));
+    if (!isNaN(id)) visibleTabs.push(id);
+  });
+  const currentIndex = visibleTabs.indexOf(tab.id);
+  if (currentIndex !== -1) {
+    // Focus next tab, or previous if closing last tab
+    const nextIndex = currentIndex < visibleTabs.length - 1 ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < visibleTabs.length) {
+      focusedTabId = visibleTabs[nextIndex];
+    }
+  }
+
   chrome.tabs.remove(tab.id);
 
   showToast(`Closed "${truncate(tab.title, 30)}"`, {
@@ -369,6 +395,48 @@ function undoCloseTab() {
 
 function truncate(str, length) {
   return str.length > length ? str.substring(0, length) + '...' : str;
+}
+
+// --- FOCUS TRAP FOR MODALS ---
+
+function trapFocus(overlay) {
+  const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const focusableElements = overlay.querySelectorAll(focusableSelector);
+  const firstFocusable = focusableElements[0];
+  const lastFocusable = focusableElements[focusableElements.length - 1];
+
+  function handleTabKey(e) {
+    if (e.key !== 'Tab') return;
+
+    if (e.shiftKey) {
+      // Shift + Tab
+      if (document.activeElement === firstFocusable) {
+        lastFocusable.focus();
+        e.preventDefault();
+      }
+    } else {
+      // Tab
+      if (document.activeElement === lastFocusable) {
+        firstFocusable.focus();
+        e.preventDefault();
+      }
+    }
+  }
+
+  overlay._focusTrapHandler = handleTabKey;
+  overlay.addEventListener('keydown', handleTabKey);
+
+  // Focus first element
+  if (firstFocusable) {
+    firstFocusable.focus();
+  }
+}
+
+function releaseFocusTrap(overlay) {
+  if (overlay._focusTrapHandler) {
+    overlay.removeEventListener('keydown', overlay._focusTrapHandler);
+    delete overlay._focusTrapHandler;
+  }
 }
 
 // --- CONTEXT MENU ---
@@ -512,11 +580,13 @@ function setupWorkspaces() {
   workspacesBtn.onclick = () => {
     workspacesOverlay.classList.remove('hidden');
     renderWorkspacesList();
-    workspaceNameInput.focus();
+    trapFocus(workspacesOverlay);
   };
 
   closeWorkspacesBtn.onclick = () => {
     workspacesOverlay.classList.add('hidden');
+    releaseFocusTrap(workspacesOverlay);
+    workspacesBtn.focus(); // Return focus to trigger
   };
 
   saveWorkspaceBtn.onclick = async () => {
@@ -560,11 +630,69 @@ function setupWorkspaces() {
     showToast(`Exported ${workspaces.length} workspaces`);
   };
 
+  // Import workspaces
+  importWorkspacesBtn.onclick = () => {
+    importFileInput.click();
+  };
+
+  importFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+
+      // Validate structure
+      if (!Array.isArray(imported)) {
+        throw new Error('Invalid format: expected array');
+      }
+
+      // Validate each workspace has required fields
+      for (const ws of imported) {
+        if (!ws.name || !Array.isArray(ws.tabs)) {
+          throw new Error('Invalid workspace format');
+        }
+      }
+
+      // Merge with existing workspaces
+      const existing = await getWorkspaces();
+      const existingIds = new Set(existing.map(w => w.id));
+
+      // Add unique ID if missing, avoid duplicates
+      const toAdd = imported
+        .filter(ws => !existingIds.has(ws.id))
+        .map(ws => ({
+          ...ws,
+          id: ws.id || Date.now().toString() + Math.random().toString(36).slice(2),
+          date: ws.date || new Date().toLocaleDateString()
+        }));
+
+      if (toAdd.length === 0) {
+        showToast('All workspaces already exist');
+        return;
+      }
+
+      const merged = [...toAdd, ...existing];
+      await saveWorkspaces(merged);
+      renderWorkspacesList();
+      showToast(`Imported ${toAdd.length} workspaces`);
+    } catch (err) {
+      showToast('Failed to import: invalid file');
+      console.error('Import error:', err);
+    }
+
+    // Reset file input
+    importFileInput.value = '';
+  };
+
   // Close overlay on escape
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (!workspacesOverlay.classList.contains('hidden')) {
         workspacesOverlay.classList.add('hidden');
+        releaseFocusTrap(workspacesOverlay);
+        workspacesBtn.focus();
       }
     }
   });
@@ -685,10 +813,13 @@ function setupSettings() {
     settingsOverlay.classList.remove('hidden');
     const window = await chrome.windows.getCurrent();
     focusModeToggle.checked = (window.state === 'fullscreen');
+    trapFocus(settingsOverlay);
   };
 
   closeSettingsBtn.onclick = () => {
     settingsOverlay.classList.add('hidden');
+    releaseFocusTrap(settingsOverlay);
+    settingsBtn.focus(); // Return focus to trigger
   };
 
   focusModeToggle.onchange = async () => {
@@ -750,6 +881,8 @@ function setupSettings() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) {
       settingsOverlay.classList.add('hidden');
+      releaseFocusTrap(settingsOverlay);
+      settingsBtn.focus();
     }
   });
 }
@@ -757,10 +890,10 @@ function setupSettings() {
 // --- KEYBOARD NAVIGATION ---
 
 function setupListeners() {
-  // Debounced search
+  // Debounced search (100ms for better performance)
   searchInput.addEventListener('input', () => {
     if (updateTimeout) clearTimeout(updateTimeout);
-    updateTimeout = setTimeout(renderAll, 50);
+    updateTimeout = setTimeout(renderAll, 100);
   });
 
   document.addEventListener('keydown', (e) => {
@@ -837,7 +970,7 @@ function handleUpdate() {
   updateTimeout = setTimeout(async () => {
     await fetchTabsAndGroups();
     renderAll();
-  }, 50);
+  }, 100);
 }
 
 // --- CHROME EVENTS ---

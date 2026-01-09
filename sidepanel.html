@@ -28,7 +28,7 @@
     </header>
 
     <!-- Tab List -->
-    <main id="scroll-container" role="tablist" aria-label="Open tabs">
+    <main id="scroll-container" role="listbox" aria-label="Open tabs">
       <!-- Pinned Tabs Section -->
       <section id="pinned-tabs-container" class="section-container hidden" aria-label="Pinned tabs">
         <div class="section-header">
@@ -62,8 +62,12 @@
         </div>
         <div class="workspace-list-header">
           <span class="workspace-list-title">Saved Workspaces</span>
-          <button id="export-workspaces-btn" class="btn btn-text" title="Export all workspaces">Export</button>
+          <div class="workspace-header-actions">
+            <button id="import-workspaces-btn" class="btn btn-text" title="Import workspaces from JSON">Import</button>
+            <button id="export-workspaces-btn" class="btn btn-text" title="Export all workspaces">Export</button>
+          </div>
         </div>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
         <div id="workspaces-list" role="list" aria-label="Saved workspaces"></div>
       </div>
     </div>
