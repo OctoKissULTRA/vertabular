@@ -1,9 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Vertabular",
-  "version": "1.0",
-  "description": "Minimal open-source vertical tabs.",
-  "permissions": ["tabs", "sidePanel", "activeTab", "tabGroups", "favicon", "storage", "bookmarks"],
+  "version": "1.1",
+  "description": "Minimal, privacy-first vertical tabs for Chrome.",
+  "permissions": [
+    "tabs",
+    "sidePanel",
+    "activeTab",
+    "tabGroups",
+    "favicon",
+    "storage",
+    "bookmarks"
+  ],
   "background": {
     "service_worker": "service-worker.js"
   },
@@ -11,11 +19,20 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "Click to open Vertical Tabs"
+    "default_title": "Open Vertabular"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Toggle Vertabular panel"
+    }
   },
   "icons": {
-    "16": "icon.png", 
+    "16": "icon.png",
     "48": "icon.png",
     "128": "icon.png"
-  } 
+  }
 }
